@@ -38,7 +38,8 @@ def run_walk_forward_backtest(prices: pd.DataFrame) -> dict[str, pd.DataFrame]:
     for date in rebalance_dates:
         date_position = prices.index.get_loc(date)
 
-        if date_position < 300:
+        if date_position < 300 or date_position >= len(prices.index) - 1:
+            # Do not trade on the final observation: there is no future holding period.
             continue
 
         cutoff_position = max(0, date_position - FORWARD_DAYS)
@@ -93,37 +94,49 @@ def run_walk_forward_backtest(prices: pd.DataFrame) -> dict[str, pd.DataFrame]:
     predictions_df = pd.DataFrame(prediction_records)
     feature_importance_df = pd.DataFrame(feature_importance_records)
 
+    outputs = evaluate_predictions(prices, predictions_df, feature_importance_df)
+    outputs["features"] = feature_matrix
+    return outputs
+
+
+def evaluate_predictions(
+    prices: pd.DataFrame,
+    predictions_df: pd.DataFrame,
+    feature_importance_df: pd.DataFrame,
+) -> dict[str, pd.DataFrame]:
+    """Evaluate existing OOS predictions without retraining the ML model."""
     weights = build_portfolio_weights(
-        prices=prices,
-        predictions=predictions_df,
-        top_n=TOP_N,
+        prices=prices, predictions=predictions_df, top_n=TOP_N
     )
-
-    portfolio_result = calculate_portfolio_returns(prices, weights)
+    portfolio_result = calculate_portfolio_returns(
+        prices, weights, rebalance_dates=pd.DatetimeIndex(predictions_df["date"].unique())
+    )
     benchmark_result = calculate_benchmark_returns(prices, BENCHMARK)
+    combined = pd.concat([portfolio_result, benchmark_result], axis=1)
 
-    combined = pd.concat(
-        [portfolio_result, benchmark_result],
-        axis=1,
-    )
+    # No comparison with SPY during the initial no-position training period.
+    invested = weights.sum(axis=1).gt(0)
+    if not invested.any():
+        raise ValueError("The portfolio has no invested periods.")
+    first_investment = invested[invested].index.min()
+    combined = combined.loc[first_investment:].copy()
+    combined.loc[first_investment, "benchmark_return"] = 0.0
+    combined["benchmark_equity"] = (1 + combined["benchmark_return"]).cumprod()
 
     portfolio_metrics = calculate_performance_metrics(
         returns=combined["portfolio_return"],
         equity_curve=combined["equity_curve"],
         turnover=combined["turnover"],
     )
-
     benchmark_metrics = calculate_performance_metrics(
         returns=combined["benchmark_return"],
         equity_curve=combined["benchmark_equity"],
     )
-
     performance_report = pd.DataFrame({
-    "Random Forest Factor Portfolio": portfolio_metrics,
-    "SPY Benchmark": benchmark_metrics,
-})
+        "Random Forest Factor Portfolio": portfolio_metrics,
+        "SPY Benchmark": benchmark_metrics,
+    })
     return {
-        "features": feature_matrix,
         "predictions": predictions_df,
         "feature_importance": feature_importance_df,
         "weights": weights,
