@@ -1,5 +1,4 @@
 import pandas as pd
-import yfinance as yf
 
 from quant_research.config import (
     TICKERS,
@@ -15,6 +14,8 @@ def download_price_data(
     start: str = START_DATE,
     end: str = END_DATE,
 ) -> pd.DataFrame:
+    import yfinance as yf  # only required when refreshing the local cache
+
     raw_data = yf.download(
         tickers,
         start=start,
