@@ -90,8 +90,9 @@ The project is intended as a research framework rather than evidence that machin
 * Top-(N) asset selection
 * Inverse-volatility allocation
 * Maximum asset-weight constraint
-* Lagged portfolio weights
-* Turnover calculation
+* Next-day execution effects through closing-time signal timing
+* Holdings drift between monthly rebalances
+* Trade-date turnover calculation
 * Explicit transaction-cost deduction
 
 ### Performance analysis
@@ -138,11 +139,7 @@ The backtest uses a diversified ETF universe representing equities, fixed income
 
 SPY is also used as the benchmark.
 
-The configured backtest period is:
-
-```text
-2010-01-01 to 2024-01-01
-```
+The cached price sample runs from **2010-01-04 to 2023-12-29** (`END_DATE = "2024-01-01"` is exclusive when downloading from Yahoo Finance). The early sample is reserved for feature warm-up and model training. Strategy performance is evaluated from the **first actual investment on 2011-05-31** to 2023-12-29, and the SPY benchmark is rebased to the same start date.
 
 ---
 
@@ -341,17 +338,17 @@ Each asset is subject to a maximum portfolio weight:
 MAX_WEIGHT = 50%
 ```
 
-After applying the cap, the remaining weights are renormalized.
+At each monthly rebalance, excess position weight is redistributed among assets with remaining capacity **without breaching the 50% target limit**. The algorithm rejects infeasible combinations of cap and number of assets rather than silently breaking the constraint. Between rebalances, actual holdings drift with prices; the cap is imposed on **rebalance targets**, not continuously intramonth.
 
 ### No look-ahead execution
 
-Portfolio weights are shifted by one trading day when calculating returns:
+Signal targets are established at the rebalance day's close. On the next trading day, the simulator earns the close-to-close return on holdings established at the previous close; holdings then drift until the next rebalance.
 
 ```text
-Return(t) uses Weight(t - 1)
+Return(t) uses holdings established at Close(t - 1)
 ```
 
-This prevents the backtest from applying a weight to the same return used to determine that weight.
+This avoids applying a newly generated signal retroactively to the return that occurred before the signal was known.
 
 ### Drawdown monitoring
 
@@ -376,18 +373,15 @@ TRANSACTION_COST = 0.001
 
 This represents 0.10% per unit of portfolio turnover.
 
-Turnover is calculated as:
+Turnover is calculated **only on actual rebalance dates** as the sum of the absolute differences between new target weights and the *drifted, pre-trade* holdings. Non-rebalance dates do not incur assumed rebalancing costs.
 
 ```text
-Sum of absolute changes in portfolio weights
+Gross daily return = sum(previous-close actual holdings × today's asset returns)
+Daily turnover = sum(abs(new target - pre-trade drifted holdings)) on trade dates
+Net daily return = Gross daily return - Daily turnover × 0.001
 ```
 
-Net portfolio return is calculated as:
-
-```text
-Net return = Gross return - Turnover × Transaction cost
-```
-
+Signals are calculated from closing data, their trades are recorded after that day's price move, and their holdings first earn market returns on the next trading day. The opening trade incurs its cost. The SPY buy-and-hold comparison excludes benchmark transaction costs.
 Including transaction costs is important because frequent portfolio changes can make an apparently profitable signal unattractive after implementation costs.
 
 The model does not currently distinguish between:
@@ -526,7 +520,7 @@ The program will:
 2. Download data when no cache exists
 3. Generate factor features
 4. Generate forward-return labels
-5. Run the walk-forward training loop
+5. Run the walk-forward training loop (this can take several minutes)
 6. Produce monthly predictions
 7. Construct the risk-controlled portfolio
 8. Apply turnover-based transaction costs
@@ -549,6 +543,14 @@ Backtest Completed
 
 ## Testing
 
+To **recalculate performance quickly without refitting the Random Forest**, using the saved out-of-sample prediction and price CSVs, run:
+
+```bash
+python -m quant_research.recompute_cached_results
+```
+
+This rebuilds weights, turnover, returns, comparative performance, and charts. It does **not** recreate or independently verify the saved model predictions. To retrain the full historical sequence instead, run `python -m quant_research.run_backtest` (potentially slow).
+
 Run the automated tests from the project root:
 
 ```bash
@@ -557,10 +559,12 @@ pytest
 
 The current tests cover:
 
-* Drawdown calculation
-* Performance-metric generation
-* Portfolio-return construction
-* Equity-curve generation
+* Drawdown and performance metrics
+* Portfolio-return construction and equity-curve generation
+* Strict position caps and infeasible-cap detection
+* Inverse-volatility allocation constraints
+* Self-financing weight drift, trade timing, and transaction-cost deduction
+* Liquidation of deselected assets on monthly rebalance dates
 
 Tests help verify that changes to the framework do not silently break core calculations.
 
@@ -594,7 +598,7 @@ importance
 
 ### `weights.csv`
 
-Contains daily portfolio weights after monthly rebalancing and forward filling.
+Contains **daily forward-filled target weights**, not the drifted intra-month weights actually held before each month's trade. Returns and transaction costs are evaluated using actual drifted holdings. Zero weights at a rebalance explicitly liquidate deselected assets.
 
 ### `backtest_results.csv`
 
@@ -626,11 +630,9 @@ results/feature_importance.png
 
 ## Performance Summary
 
-Backtest period:
+Price-data period: **2010-01-04 to 2023-12-29**. Comparable invested-period performance: **2011-05-31 to 2023-12-29**. The strategy is in cash before its first trained monthly signal; this pre-investment span is not included in the reported performance comparison.
 
-```text
-2010-01-01 to 2024-01-01
-```
+**Recalculation note:** The results below were regenerated from the existing cached out-of-sample predictions using the corrected portfolio engine; the Random Forest models were **not retrained** during this revision.
 
 Benchmark:
 
@@ -640,14 +642,14 @@ SPY Buy and Hold
 
 | Metric                 | ML Risk-Controlled Portfolio | SPY Benchmark |
 | ---------------------- | ---------------------------: | ------------: |
-| Total Return           |                      266.36% |       445.52% |
-| CAGR                   |                        9.73% |        12.90% |
-| Annualized Volatility  |                       18.06% |        17.33% |
-| Sharpe Ratio           |                         0.61 |          0.79 |
-| Maximum Drawdown       |                      -37.34% |       -33.72% |
-| Calmar Ratio           |                         0.26 |          0.38 |
-| Positive Day Ratio     |                       48.81% |        55.03% |
-| Average Daily Turnover |                        4.83% |           N/A |
+| Total Return           |                      264.33% |       347.52% |
+| CAGR                   |                       10.82% |        12.65% |
+| Annualized Volatility  |                       18.96% |        17.43% |
+| Sharpe Ratio           |                         0.64 |          0.77 |
+| Maximum Drawdown       |                      -36.67% |       -33.72% |
+| Calmar Ratio           |                         0.30 |          0.38 |
+| Positive Day Ratio     |                       54.26% |        54.73% |
+| Average Daily Turnover |                        5.33% |           N/A |
 
 ---
 
@@ -671,17 +673,17 @@ SPY Buy and Hold
 
 The ML risk-controlled portfolio generated substantial positive returns over the test period, but it did not outperform the SPY benchmark.
 
-The portfolio produced:
+The portfolio produced (over the common invested period):
 
 * Lower total return
 * Lower CAGR
 * Lower Sharpe ratio
 * Lower Calmar ratio
 * A deeper maximum drawdown
-* Slightly higher annualized volatility
-* A lower positive-day ratio
+* Higher annualized volatility
+* A slightly lower positive-day ratio
 
-The strategy's average daily turnover was approximately 4.83%, which also created transaction-cost drag.
+The strategy's average daily turnover was approximately 5.33% during the invested sample, with turnover concentrated on rebalance dates. This introduces transaction-cost drag.
 
 These findings are important because they demonstrate that:
 
