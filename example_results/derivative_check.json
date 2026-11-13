@@ -1,0 +1,5 @@
+{
+  "max_gradient_abs_error": 1.0244832759909173e-11,
+  "max_hessian_abs_error": 1.102708202527225e-12,
+  "hessian_min_eigenvalue": 0.20599268869345377
+}

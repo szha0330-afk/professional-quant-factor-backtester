@@ -1,899 +1,132 @@
-# professional-quant-factor-backtester
-A modular Python framework for machine-learning-based cross-asset portfolio research, walk-forward backtesting, risk-controlled portfolio construction, transaction-cost modeling, and performance evaluation.
+# Professional Quant Factor Backtester — Multivariable Calculus Edition
 
-## Table of Contents
+**A reproducible research demonstration of cross-asset factor forecasting and constrained portfolio optimization.**
 
-* [Project Overview](#project-overview)
-* [Research Objective](#research-objective)
-* [Key Features](#key-features)
-* [Asset Universe](#asset-universe)
-* [Factor Features](#factor-features)
-* [Machine Learning Model](#machine-learning-model)
-* [Walk-Forward Methodology](#walk-forward-methodology)
-* [Portfolio Construction](#portfolio-construction)
-* [Risk Management](#risk-management)
-* [Transaction Cost Model](#transaction-cost-model)
-* [Project Architecture](#project-architecture)
-* [Installation](#installation)
-* [How to Run](#how-to-run)
-* [Testing](#testing)
-* [Output Files](#output-files)
-* [Performance Summary](#performance-summary)
-* [Results](#results)
-* [Interpretation](#interpretation)
-* [Research Limitations](#research-limitations)
-* [Possible Improvements](#possible-improvements)
-* [Disclaimer](#disclaimer)
+> **Repository provenance:** This is a **complete, independently runnable reconstruction** of the previously discussed factor backtester, not an exact edited clone of an inaccessible upstream GitHub repository. It retains the described research architecture (10 ETF universe, nine lagged price factors, expanding-window Random Forest forecasts, inverse-volatility baseline, 50% position cap, walk-forward evaluation, transaction costs) and adds an integrated 21-day mean–variance allocation path. If you have the original repository, compare and merge the changes before overwriting it.
+>
+> **Data honesty:** The included demo and `example_results/` use **synthetic prices**, not observed ETF histories. Do not claim the demo's CAGR or Sharpe ratios as real-world results.
 
----
+## Research question
 
-## Project Overview
+Do forecasts of 21-trading-day returns, incorporated into a convex mean–variance optimizer with position bounds, change the performance and turnover of a monthly ETF allocation strategy relative to an inverse-volatility baseline, when both use identical historical information and execution assumptions?
 
-This project implements an end-to-end quantitative research and portfolio backtesting framework in Python.
+## Key features
 
-It combines:
+- Universe: SPY, QQQ, IWM, TLT, GLD, EFA, EEM, LQD, HYG, VNQ (configurable through CSV input).
+- **Nine price factors**: 5/21/63/126-day momentum, 20/60-day moving-average gaps, 21/63-day annualized volatility, 63-day drawdown.
+- **Expanding-window Random Forest**: forecasts each ETF's forward 21-day total return at month-end; the training set excludes labels unavailable on the prediction date.
+- **Two portfolio configurations**: inverse-volatility weighting and analytic-gradient mean–variance optimization, both long-only, fully invested, and capped at 50% per asset.
+- **Multivariable calculus**: explicit gradient, Hessian, finite-difference checks, convexity diagnostic, variance and Euler volatility-risk contributions.
+- **Constrained SLSQP** with the analytic gradient; the Hessian is computed and validated independently (SLSQP does not consume it).
+- **Next-session execution assumption**: signals generated at close on trading day *t* affect returns beginning at *t+1*, with drift-aware turnover and proportional transaction costs.
+- **Verification**: deterministic offline unit tests; a CLI writes CSVs, a comparison PNG, and a derivative audit.
 
-* Historical market data collection
-* Local price-data caching
-* Multi-factor feature engineering
-* Forward-return label construction
-* Random Forest return prediction
-* Walk-forward out-of-sample evaluation
-* Cross-sectional asset ranking
-* Inverse-volatility portfolio weighting
-* Maximum position constraints
-* Monthly portfolio rebalancing
-* Transaction-cost modeling
-* Benchmark comparison
-* Performance and drawdown analysis
-* Feature-importance analysis
-* Automated unit testing
+## Get started (Windows PowerShell / macOS / Linux)
 
-The project is designed to demonstrate both quantitative research methodology and software-engineering structure. Rather than placing the entire workflow in one script, individual responsibilities are separated into reusable modules.
-
----
-
-## Research Objective
-
-The research question is:
-
-> Can a machine-learning model use historical price-based factors to identify ETFs with relatively stronger future 21-day returns?
-
-At each monthly rebalance date, the framework:
-
-1. Generates quantitative factors for every ETF
-2. Trains a model using only previously available observations
-3. Predicts each ETF's forward 21-day return
-4. Ranks the ETFs by predicted return
-5. Selects the top-ranked assets
-6. Allocates capital using inverse-volatility weights
-7. Applies position limits and transaction costs
-8. Compares the resulting portfolio with SPY buy-and-hold
-
-The project is intended as a research framework rather than evidence that machine learning necessarily produces market-beating returns.
-
----
-
-## Key Features
-
-### Quantitative research
-
-* Cross-sectional ETF return prediction
-* Multiple momentum and risk factors
-* Forward 21-day return targets
-* Monthly model retraining
-* Walk-forward out-of-sample predictions
-* Feature-importance tracking through time
-
-### Portfolio construction
-
-* Top-(N) asset selection
-* Inverse-volatility allocation
-* Maximum asset-weight constraint
-* Next-day execution effects through closing-time signal timing
-* Holdings drift between monthly rebalances
-* Trade-date turnover calculation
-* Explicit transaction-cost deduction
-
-### Performance analysis
-
-* Total return
-* Compound annual growth rate
-* Annualized volatility
-* Sharpe ratio
-* Maximum drawdown
-* Calmar ratio
-* Positive-day ratio
-* Average daily turnover
-* Benchmark comparison
-
-### Software engineering
-
-* Modular package structure
-* Type annotations
-* Reusable functions
-* Cached market data
-* Configurable parameters
-* Separate plotting module
-* Unit tests with `pytest`
-* Reproducible random state
-
----
-
-## Asset Universe
-
-The backtest uses a diversified ETF universe representing equities, fixed income, commodities, real estate, international markets, and sectors.
-
-| Ticker | Exposure                         |
-| ------ | -------------------------------- |
-| SPY    | S&P 500 equities                 |
-| QQQ    | Nasdaq-100 equities              |
-| IWM    | U.S. small-cap equities          |
-| TLT    | Long-term U.S. Treasury bonds    |
-| GLD    | Gold                             |
-| EFA    | Developed international equities |
-| EEM    | Emerging-market equities         |
-| VNQ    | U.S. real estate                 |
-| XLE    | U.S. energy sector               |
-| XLK    | U.S. technology sector           |
-
-SPY is also used as the benchmark.
-
-The cached price sample runs from **2010-01-04 to 2023-12-29** (`END_DATE = "2024-01-01"` is exclusive when downloading from Yahoo Finance). The early sample is reserved for feature warm-up and model training. Strategy performance is evaluated from the **first actual investment on 2011-05-31** to 2023-12-29, and the SPY benchmark is rebased to the same start date.
-
----
-
-## Factor Features
-
-For every date and ETF, the framework calculates the following predictors.
-
-### Momentum factors
-
-* **21-day momentum**
-
-```text
-Price(t) / Price(t - 21) - 1
-```
-
-* **63-day momentum**
-
-```text
-Price(t) / Price(t - 63) - 1
-```
-
-* **126-day momentum**
-
-```text
-Price(t) / Price(t - 126) - 1
-```
-
-* **252-day momentum**
-
-```text
-Price(t) / Price(t - 252) - 1
-```
-
-These features represent short-, medium-, and long-horizon price trends.
-
-### Volatility factors
-
-* 21-day annualized volatility
-* 63-day annualized volatility
-
-Daily-return standard deviation is annualized using approximately 252 trading days.
-
-### Drawdown factor
-
-* 63-day rolling drawdown
-
-This measures the current price relative to its highest value over the previous 63 trading days.
-
-### Trend factor
-
-* 50-day versus 200-day moving-average spread
-
-```text
-50-day moving average / 200-day moving average - 1
-```
-
-A positive value indicates that the shorter moving average is above the longer moving average.
-
-### RSI factor
-
-* 14-day Relative Strength Index
-
-The RSI is scaled to a range between 0 and 1 before being passed to the model.
-
----
-
-## Machine Learning Model
-
-The project uses a:
-
-```text
-RandomForestRegressor
-```
-
-The model predicts each ETF's forward 21-day return.
-
-### Model configuration
-
-```text
-Number of trees: 300
-Maximum tree depth: 5
-Minimum samples per leaf: 5
-Random state: 42
-```
-
-The constrained tree depth and minimum leaf size are intended to reduce model complexity relative to an unrestricted Random Forest.
-
-### Why Random Forest?
-
-Random Forest is suitable for this project because it:
-
-* Works well with tabular factor data
-* Captures nonlinear relationships
-* Captures interactions between factors
-* Does not require feature standardization
-* Is relatively robust to outliers
-* Produces feature-importance estimates
-* Can model relationships that a linear model may miss
-
-However, Random Forest predictions are not automatically profitable. Financial data are noisy, non-stationary, and highly sensitive to the selected period and asset universe.
-
----
-
-## Forward-Return Target
-
-The prediction target is the future 21-trading-day return:
-
-```text
-Price(t + 21) / Price(t) - 1
-```
-
-This corresponds approximately to a one-month investment horizon.
-
-Each model prediction represents the estimated forward return for one ETF at one rebalance date.
-
----
-
-## Walk-Forward Methodology
-
-The framework uses a walk-forward process rather than fitting one model to the entire dataset.
-
-At each monthly rebalance date:
-
-1. Factor features are calculated using information available up to that date
-2. Training observations are restricted to historical data
-3. A 21-day cutoff is applied so that training labels are already observable
-4. The Random Forest model is retrained
-5. The current ETF cross-section is passed to the model
-6. Predicted forward returns are generated
-7. ETFs are ranked by predicted return
-8. The portfolio is rebalanced for the next holding period
-
-This process is designed to reduce look-ahead bias.
-
-The relevant training cutoff is conceptually:
-
-```text
-Training feature date + 21 trading days <= current prediction date
-```
-
-The model therefore does not intentionally train on a target whose realization occurs after the current rebalance date.
-
----
-
-## Portfolio Construction
-
-The portfolio-construction process is divided into two stages.
-
-### Stage 1: Asset selection
-
-At each rebalance date:
-
-1. Predict the forward return of every ETF
-2. Rank ETFs from highest to lowest predicted return
-3. Select the top 3 ETFs
-
-Configured value:
-
-```text
-TOP_N = 3
-```
-
-### Stage 2: Risk-based allocation
-
-The selected ETFs are not automatically assigned equal weights.
-
-Instead, the strategy calculates each selected asset's recent volatility and assigns inverse-volatility weights:
-
-```text
-Raw weight ∝ 1 / volatility
-```
-
-Assets with lower recent volatility receive relatively larger allocations, while more volatile assets receive smaller allocations.
-
-The raw weights are normalized so that the portfolio sums to 100%.
-
----
-
-## Risk Management
-
-### Inverse-volatility weighting
-
-The framework uses a 63-trading-day volatility lookback:
-
-```text
-VOL_LOOKBACK = 63
-```
-
-This helps prevent the portfolio from allocating the same amount to assets with materially different risk levels.
-
-### Maximum position weight
-
-Each asset is subject to a maximum portfolio weight:
-
-```text
-MAX_WEIGHT = 50%
-```
-
-At each monthly rebalance, excess position weight is redistributed among assets with remaining capacity **without breaching the 50% target limit**. The algorithm rejects infeasible combinations of cap and number of assets rather than silently breaking the constraint. Between rebalances, actual holdings drift with prices; the cap is imposed on **rebalance targets**, not continuously intramonth.
-
-### No look-ahead execution
-
-Signal targets are established at the rebalance day's close. On the next trading day, the simulator earns the close-to-close return on holdings established at the previous close; holdings then drift until the next rebalance.
-
-```text
-Return(t) uses holdings established at Close(t - 1)
-```
-
-This avoids applying a newly generated signal retroactively to the return that occurred before the signal was known.
-
-### Drawdown monitoring
-
-The framework calculates the drawdown series for both:
-
-* ML risk-controlled portfolio
-* SPY benchmark
-
-This makes it possible to compare not only final wealth but also the path and severity of losses.
-
----
-
-## Transaction Cost Model
-
-The strategy applies a proportional transaction cost based on portfolio turnover.
-
-Configured transaction cost:
-
-```text
-TRANSACTION_COST = 0.001
-```
-
-This represents 0.10% per unit of portfolio turnover.
-
-Turnover is calculated **only on actual rebalance dates** as the sum of the absolute differences between new target weights and the *drifted, pre-trade* holdings. Non-rebalance dates do not incur assumed rebalancing costs.
-
-```text
-Gross daily return = sum(previous-close actual holdings × today's asset returns)
-Daily turnover = sum(abs(new target - pre-trade drifted holdings)) on trade dates
-Net daily return = Gross daily return - Daily turnover × 0.001
-```
-
-Signals are calculated from closing data, their trades are recorded after that day's price move, and their holdings first earn market returns on the next trading day. The opening trade incurs its cost. The SPY buy-and-hold comparison excludes benchmark transaction costs.
-Including transaction costs is important because frequent portfolio changes can make an apparently profitable signal unattractive after implementation costs.
-
-The model does not currently distinguish between:
-
-* Commissions
-* Bid-ask spread
-* Market impact
-* Slippage
-* Borrowing costs
-* Tax effects
-
-These are listed as areas for future development.
-
----
-
-## Feature Importance
-
-For every walk-forward model, the framework records Random Forest feature importance.
-
-The average importance of each feature is plotted in:
-
-```text
-results/feature_importance.png
-```
-
-The raw time-series feature-importance observations are saved in:
-
-```text
-results/feature_importance.csv
-```
-
-Feature importance should be interpreted carefully. It measures how the fitted Random Forest uses each variable, but it does not prove that the feature has a stable causal relationship with future returns.
-
----
-
-## Project Architecture
-
-```text
-professional-quant-factor-backtester/
-├── README.md
-├── requirements.txt
-├── .gitignore
-├── LICENSE
-│
-├── quant_research/
-│   ├── __init__.py
-│   ├── config.py
-│   ├── data.py
-│   ├── features.py
-│   ├── labels.py
-│   ├── model.py
-│   ├── portfolio.py
-│   ├── backtester.py
-│   ├── metrics.py
-│   ├── plots.py
-│   └── run_backtest.py
-│
-├── data/
-│   └── prices.csv
-│
-├── results/
-│   ├── equity_curve.png
-│   ├── drawdown.png
-│   ├── feature_importance.png
-│   ├── predictions.csv
-│   ├── feature_importance.csv
-│   ├── weights.csv
-│   ├── backtest_results.csv
-│   └── performance_report.csv
-│
-└── tests/
-    ├── test_metrics.py
-    └── test_portfolio.py
-```
-
-### Module responsibilities
-
-| Module            | Responsibility                                     |
-| ----------------- | -------------------------------------------------- |
-| `config.py`       | Central configuration and research parameters      |
-| `data.py`         | Data downloading, cleaning, caching, and loading   |
-| `features.py`     | Factor construction and feature reshaping          |
-| `labels.py`       | Forward-return target creation                     |
-| `model.py`        | Model training, prediction, and feature importance |
-| `portfolio.py`    | Asset selection, weighting, costs, and returns     |
-| `backtester.py`   | Walk-forward research orchestration                |
-| `metrics.py`      | Performance and risk statistics                    |
-| `plots.py`        | Equity, drawdown, and importance charts            |
-| `run_backtest.py` | Main executable entry point                        |
-| `tests/`          | Unit tests for core calculations                   |
-
----
-
-## Installation
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/szha0330-afk/professional-quant-factor-backtester.git
-```
-
-### 2. Enter the project directory
-
-```bash
-cd professional-quant-factor-backtester
-```
-
-### 3. Install dependencies
+Requires Python 3.10 or newer. From the extracted project directory:
 
 ```bash
 python -m pip install -r requirements.txt
+python -m pytest -q
+python run_demo.py --source synthetic --days 500 --estimators 8 --output example_results
 ```
 
-The project uses:
+The last command should write:
 
-* pandas
-* numpy
-* matplotlib
-* yfinance
-* scikit-learn
-* pytest
+| File | Content |
+|---|---|
+| `strategy_metrics.csv` | Net CAGR, volatility, Sharpe (zero risk-free rate), max drawdown, total turnover |
+| `equity_curves.csv` | Daily portfolio values for both allocators and the benchmark |
+| `comparison.png` | Illustration of synthetic equity curves |
+| `predictions.csv` | Forecasts and strictly lagged training cutoff dates |
+| `signal_weights_inverse_vol.csv` | Inverse-volatility weights at signal close |
+| `signal_weights_mean_variance.csv` | MVO weights at signal close |
+| `daily_*.csv`, `trades_*.csv` | Daily returns, transaction costs and execution schedule |
+| `derivative_check.json` | Maximum finite-difference gradient/Hessian error |
+| `DATA_PROVENANCE.txt` | Whether inputs were synthetic or user/vendor supplied |
 
----
+### Run with real adjusted-close price data
 
-## How to Run
+Supply a wide CSV with **one row per trading date** and adjusted-close ETF prices, e.g.:
 
-Run the complete backtest from the repository root:
+```csv
+Date,SPY,QQQ,IWM,TLT,GLD
+2020-01-02,100.0,100.0,100.0,100.0,100.0
+2020-01-03,99.5,99.2,99.0,100.4,100.2
+```
+
+The illustration above has too few observations to run a model: **at least about 300+ complete trading dates** are required; 650+ is preferable for a meaningful first evaluation. Run:
 
 ```bash
-python -m quant_research.run_backtest
+python run_demo.py --source csv --csv adjusted_prices.csv --output results_real
 ```
 
-The program will:
-
-1. Load cached prices when available
-2. Download data when no cache exists
-3. Generate factor features
-4. Generate forward-return labels
-5. Run the walk-forward training loop (this can take several minutes)
-6. Produce monthly predictions
-7. Construct the risk-controlled portfolio
-8. Apply turnover-based transaction costs
-9. Calculate performance statistics
-10. Save CSV outputs and charts
-
-Example terminal output:
-
-```text
-Loading price data...
-Running walk-forward ML factor backtest...
-Saving result files...
-Generating plots...
-
-Backtest Completed
-------------------
-```
-
----
-
-## Testing
-
-To **recalculate performance quickly without refitting the Random Forest**, using the saved out-of-sample prediction and price CSVs, run:
+For optional Yahoo Finance download (internet required; unverified in this offline environment):
 
 ```bash
-python -m quant_research.recompute_cached_results
+python -m pip install -r requirements-optional.txt
+python run_demo.py --source yahoo --output results_yahoo
 ```
 
-This rebuilds weights, turnover, returns, comparative performance, and charts. It does **not** recreate or independently verify the saved model predictions. To retrain the full historical sequence instead, run `python -m quant_research.run_backtest` (potentially slow).
+**No price data or API credentials are bundled.** The CSV path is the most reproducible way to run research with a documented data vendor/source.
 
-Run the automated tests from the project root:
+## Math: what the implementation proves
 
-```bash
-pytest
-```
+Let \(\hat\mu_{21}\) be the forecast 21-day returns, \(\Sigma_{21}\) be a covariance estimate for 21-day returns, \(\lambda>0\) control risk aversion, and \(w\) be the vector of asset weights:
 
-The current tests cover:
+\[
+\min_w\; f(w)=\tfrac{\lambda}{2}w^\top\Sigma_{21}w-\hat\mu_{21}^\top w,
+\qquad \mathbf 1^\top w=1,\quad 0\le w_i\le 0.5.
+\]
 
-* Drawdown and performance metrics
-* Portfolio-return construction and equity-curve generation
-* Strict position caps and infeasible-cap detection
-* Inverse-volatility allocation constraints
-* Self-financing weight drift, trade timing, and transaction-cost deduction
-* Liquidation of deselected assets on monthly rebalance dates
+Analytically,
 
-Tests help verify that changes to the framework do not silently break core calculations.
+\[
+\nabla_w f(w)=\lambda\Sigma_{21}w-\hat\mu_{21},
+\qquad \nabla_w^2 f(w)=\lambda\Sigma_{21}.
+\]
 
----
+The covariance is estimated from at most the preceding 63 complete daily returns and multiplied by 21. This scaling **assumes negligible serial correlation** and is only an approximation. Diagonal covariance shrinkage is applied to reduce estimation noise. With \(\Sigma_{21}\) positive semidefinite, the continuous objective is convex; a feasible full-investment, bounded solution can be found using SLSQP.
 
-## Output Files
+The implementation explicitly checks the analytic gradient and Hessian against finite differences (see `quant_research/diagnostics.py`). See [Mathematical Notes](docs/MATHEMATICAL_FOUNDATIONS.md) for KKT conditions and limitations.
 
-### `predictions.csv`
+**Scope:** This shows partial differentiation, matrix calculus, Hessians, and constrained optimization. It does **not** establish coursework in double/triple integrals or substitute for an MFE program's prerequisite transcript requirements.
 
-Contains model predictions for each rebalance date and ticker.
-
-Example columns:
+## Project structure
 
 ```text
-date
-ticker
-predicted_forward_return
+quant_research/
+  config.py          parameter defaults
+  data.py            validated CSV, optional Yahoo, synthetic demo
+  factors.py         nine factors and 21-day target construction
+  model.py           expanding-window, embargoed monthly forecasts
+  portfolio.py       capped inverse-vol baseline / MVO selector
+  optimization.py    objective, gradient, Hessian, MVO optimizer
+  diagnostics.py     finite differences, Euler risk contributions
+  backtest.py        next-session, cost-aware portfolio simulation
+  metrics.py         CAGR, Sharpe, max drawdown, volatility
+run_demo.py           command-line end-to-end pipeline
+examples/             derivatives demo
+example_results/      one synthetic sample run, clearly labeled
+tests/                automated research/math tests
+docs/                 math explanation, migration and caveats
+.github/workflows/    GitHub Actions test workflow
 ```
 
-### `feature_importance.csv`
+## Bias controls, assumptions, and limitations
 
-Contains model feature importance for every walk-forward training date.
+1. Signals use only current/past closes. Each training label is included only after its full 21-day outcome is observed (`training_cutoff` is at most signal index minus 21 sessions).
+2. Signals are computed **after** the signal day's close. Returns attributable to any target start the following session. The backtest assumes next-session execution at **the previous close**: this is an idealized timing assumption, **not** evidence of achievable fills. Real execution should use next-session opens/quotes and slippage.
+3. ETF returns assume adjusted closing prices; missing data are rejected rather than silently forward-filled. The implementation does not model borrow, spreads, taxes, market impact, intraday gaps, exchange calendars, ETF inception/survivorship changes, or interest on cash.
+4. The strategy is long-only and fully invested after the first rebalance, with a maximum single-ETF allocation of 50%. All selected predicted returns may be negative; it still invests fully.
+5. The annualization factor is 252 and the Sharpe calculation uses a zero risk-free rate. Benchmark SPY is shown without buy-side execution costs; allocator turnover includes entry and later rebalances.
+6. Random Forest forecasts are noisy; portfolio optimization is sensitive to estimated returns/covariance. Out-of-sample results must be independently checked and may be worse than the baseline.
+7. The sample synthetic generator uses weekdays, not an actual exchange holiday calendar. Sample performance is pedagogical only.
 
-Example columns:
+## Research and application use
 
-```text
-date
-feature
-importance
-```
+Describe the **implemented methods** and mathematical diagnostics, not unverified outperformance. Suggested resume wording after inspecting the code and reproducing the results:
 
-### `weights.csv`
+> Extended a walk-forward ETF factor backtester with a constrained mean–variance optimizer, implementing and validating analytic gradients/Hessians, no-lookahead 21-day forecast alignment, and transaction-cost-aware comparisons against inverse-volatility allocation.
 
-Contains **daily forward-filled target weights**, not the drifted intra-month weights actually held before each month's trade. Returns and transaction costs are evaluated using actual drifted holdings. Zero weights at a rebalance explicitly liquidate deselected assets.
-
-### `backtest_results.csv`
-
-Contains:
-
-* Gross portfolio return
-* Transaction cost
-* Net portfolio return
-* Turnover
-* Portfolio equity curve
-* Benchmark return
-* Benchmark equity curve
-
-### `performance_report.csv`
-
-Contains the final performance comparison between the strategy and benchmark.
-
-### Charts
-
-The framework generates:
-
-```text
-results/equity_curve.png
-results/drawdown.png
-results/feature_importance.png
-```
-
----
-
-## Performance Summary
-
-Price-data period: **2010-01-04 to 2023-12-29**. Comparable invested-period performance: **2011-05-31 to 2023-12-29**. The strategy is in cash before its first trained monthly signal; this pre-investment span is not included in the reported performance comparison.
-
-**Recalculation note:** The results below were regenerated from the existing cached out-of-sample predictions using the corrected portfolio engine; the Random Forest models were **not retrained** during this revision.
-
-Benchmark:
-
-```text
-SPY Buy and Hold
-```
-
-| Metric                 | ML Risk-Controlled Portfolio | SPY Benchmark |
-| ---------------------- | ---------------------------: | ------------: |
-| Total Return           |                      264.33% |       347.52% |
-| CAGR                   |                       10.82% |        12.65% |
-| Annualized Volatility  |                       18.96% |        17.43% |
-| Sharpe Ratio           |                         0.64 |          0.77 |
-| Maximum Drawdown       |                      -36.67% |       -33.72% |
-| Calmar Ratio           |                         0.30 |          0.38 |
-| Positive Day Ratio     |                       54.26% |        54.73% |
-| Average Daily Turnover |                        5.33% |           N/A |
-
----
-
-## Results
-
-### Equity Curve
-
-![Equity Curve](results/equity_curve.png)
-
-### Drawdown Comparison
-
-![Drawdown Comparison](results/drawdown.png)
-
-### Average Feature Importance
-
-![Feature Importance](results/feature_importance.png)
-
----
-
-## Interpretation
-
-The ML risk-controlled portfolio generated substantial positive returns over the test period, but it did not outperform the SPY benchmark.
-
-The portfolio produced (over the common invested period):
-
-* Lower total return
-* Lower CAGR
-* Lower Sharpe ratio
-* Lower Calmar ratio
-* A deeper maximum drawdown
-* Higher annualized volatility
-* A slightly lower positive-day ratio
-
-The strategy's average daily turnover was approximately 5.33% during the invested sample, with turnover concentrated on rebalance dates. This introduces transaction-cost drag.
-
-These findings are important because they demonstrate that:
-
-> Greater model complexity does not automatically produce superior investment performance.
-
-The Random Forest learned relationships between historical factors and forward returns, but those relationships were not strong or stable enough to outperform a simple equity benchmark over this sample.
-
-The result is still valuable from a research perspective. A professional quantitative project should report unfavorable findings honestly rather than selectively changing parameters until the backtest appears successful.
-
----
-
-## What the Results Suggest
-
-Several explanations may contribute to the underperformance.
-
-### Limited predictors
-
-The model uses only price-derived technical factors. It does not include:
-
-* Valuation data
-* Earnings information
-* Interest rates
-* Inflation data
-* Credit spreads
-* Volatility indices
-* Economic-surprise indicators
-* Fund flows
-* Positioning data
-* Alternative data
-
-### Small cross-sectional universe
-
-The asset universe contains only ten ETFs. This provides relatively few observations at each prediction date and limits cross-sectional diversification.
-
-### Benchmark concentration
-
-SPY performed strongly over much of the selected period. A diversified cross-asset strategy may naturally lag a concentrated U.S. equity benchmark during a sustained equity bull market.
-
-### Model instability
-
-Feature-return relationships can change through time. Random Forest may fit historical nonlinear patterns that do not remain stable out of sample.
-
-### Turnover drag
-
-Monthly ranking changes generate turnover. Even relatively small per-trade costs accumulate over a long backtest.
-
-### Risk model limitations
-
-Inverse-volatility weighting controls relative position sizes but does not directly manage:
-
-* Portfolio-level volatility
-* Cross-asset correlation
-* Tail dependence
-* Regime shifts
-* Maximum drawdown
-* Factor concentration
-
----
-
-## Research Limitations
-
-This project is intended for educational and research demonstration. It is not a production trading system.
-
-Important limitations include:
-
-1. **Data-source limitations**
-   The project relies on Yahoo Finance data, which may differ from institutional databases.
-
-2. **Survivorship and selection bias**
-   The ETF universe is selected using instruments known today.
-
-3. **Simplified execution assumptions**
-   The backtest does not model intraday execution, market impact, liquidity constraints, or partial fills.
-
-4. **Simplified transaction costs**
-   One constant proportional cost is applied to all instruments and periods.
-
-5. **No hyperparameter validation framework**
-   Model parameters are fixed rather than selected through nested time-series validation.
-
-6. **No probability calibration or prediction intervals**
-   The model produces point forecasts without confidence estimates.
-
-7. **No explicit cash regime**
-   The strategy always allocates to the top-ranked assets, even when all predicted returns are weak or negative.
-
-8. **No portfolio-volatility target**
-   Inverse-volatility weighting does not ensure that overall portfolio volatility remains constant.
-
-9. **Limited model diversity**
-   Only Random Forest is evaluated.
-
-10. **No formal statistical significance test**
-    The framework does not yet calculate bootstrap confidence intervals, White's Reality Check, or Deflated Sharpe Ratio.
-
----
-
-## Possible Improvements
-
-### Data and features
-
-* Add macroeconomic variables
-* Add yield-curve factors
-* Add inflation and interest-rate indicators
-* Add valuation measures
-* Add volatility-index data
-* Add correlation and beta factors
-* Add cross-sectional factor ranks
-* Add rolling factor z-scores
-* Add regime-classification features
-
-### Machine learning
-
-* Compare linear regression and Elastic Net
-* Compare Random Forest and Extra Trees
-* Add Gradient Boosting
-* Add XGBoost or LightGBM
-* Add time-series-aware hyperparameter tuning
-* Add expanding versus rolling training windows
-* Add model ensembles
-* Add prediction confidence filters
-* Add SHAP-based model interpretation
-
-### Portfolio construction
-
-* Add volatility targeting
-* Add cash allocation
-* Add minimum predicted-return threshold
-* Add covariance-aware optimization
-* Add risk-parity allocation
-* Add maximum sector and asset-class exposure
-* Add turnover penalties
-* Add weight smoothing
-* Add position holding constraints
-
-### Validation
-
-* Add purged time-series cross-validation
-* Add embargo periods
-* Add rolling out-of-sample windows
-* Add subperiod analysis
-* Add market-regime analysis
-* Add transaction-cost sensitivity testing
-* Add parameter-stability testing
-* Add bootstrap confidence intervals
-* Add probabilistic Sharpe ratio
-* Add Deflated Sharpe Ratio
-
-### Engineering
-
-* Add command-line arguments
-* Add YAML configuration
-* Add structured logging
-* Add continuous integration with GitHub Actions
-* Add static type checking
-* Add code formatting and linting
-* Add test coverage reporting
-* Package the framework for installation
-* Add experiment tracking
-
----
-
-## Reproducibility
-
-The Random Forest uses:
-
-```text
-RANDOM_STATE = 42
-```
-
-This helps ensure repeatable model fitting when the same:
-
-* Python version
-* Package versions
-* Data
-* Parameters
-* Date range
-
-are used.
-
-For stronger reproducibility, future versions should pin dependency versions in `requirements.txt` or use a dedicated environment file.
-
----
-
-## Key Takeaways
-
-This project demonstrates a complete quantitative workflow rather than only presenting a final return chart.
-
-The main lessons are:
-
-* Walk-forward validation is essential for time-dependent financial data
-* Training labels must be carefully aligned to avoid look-ahead bias
-* Transaction costs can materially affect performance
-* Portfolio construction is as important as prediction accuracy
-* Inverse-volatility weighting does not guarantee lower portfolio drawdown
-* Machine learning does not automatically create alpha
-* Honest negative results are valuable in quantitative research
-* Modular architecture makes research easier to test and extend
-
----
-
-## Disclaimer
-
-This repository is provided for educational and research purposes only.
-
-It does not constitute:
-
-* Investment advice
-* Trading advice
-* A recommendation to buy or sell securities
-* A guarantee of future investment performance
-
-Historical backtest results are hypothetical and do not represent actual trading. Real-world results may differ due to fees, slippage, liquidity constraints, market impact, taxes, data quality, and changing market conditions.
+See [Migration instructions (中文)](docs/INTEGRATION_GUIDE_CN.md) and [Methodology](docs/METHODOLOGY_AND_LIMITATIONS.md).
