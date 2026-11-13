@@ -1,0 +1,2 @@
+# Needed only for optional --source yahoo (requires internet access)
+yfinance>=0.2
