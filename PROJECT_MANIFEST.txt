@@ -1,0 +1,15 @@
+Deliverable: Professional Quant Factor Backtester — Multivariable Calculus Edition
+Status: independently runnable reconstructed project (not direct upstream clone).
+Source availability: original GitHub source could not be retrieved in this run.
+Includes:
+ - complete modular Python research pipeline
+ - unit-tested constrained MVO + analytic gradient and Hessian
+ - inverse-volatility baseline
+ - offline deterministic synthetic-price run + sample outputs
+ - train-label horizon embargo, signal/return timing, turnover and trading cost simulation
+ - README, mathematical/limitations notes, Chinese migration instructions
+ - GitHub Actions pytest workflow
+Known not validated:
+ - Yahoo Finance network/data path (requires internet/yfinance)
+ - real ETF data results or realistic transaction fills
+Do not interpret example_results statistics as market performance.
