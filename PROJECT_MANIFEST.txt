@@ -1,15 +1,20 @@
-Deliverable: Professional Quant Factor Backtester — Multivariable Calculus Edition
-Status: independently runnable reconstructed project (not direct upstream clone).
-Source availability: original GitHub source could not be retrieved in this run.
+Deliverable: Professional Quant Factor Backtester — unified research codebase
+Status: reproducible synthetic example; real-market performance not validated.
+Provenance: reconstructed research implementation, not an exact upstream clone.
+Canonical entrypoint: python run_demo.py
+Canonical code: quant_research/{config,data,factors,model,portfolio,optimization,diagnostics,backtest,metrics}.py
+Default universe: SPY,QQQ,IWM,TLT,GLD,EFA,EEM,VNQ,XLE,XLK
 Includes:
- - complete modular Python research pipeline
- - unit-tested constrained MVO + analytic gradient and Hessian
- - inverse-volatility baseline
- - offline deterministic synthetic-price run + sample outputs
- - train-label horizon embargo, signal/return timing, turnover and trading cost simulation
- - README, mathematical/limitations notes, Chinese migration instructions
+ - analytic gradient and Hessian; constrained SLSQP allocation
+ - derivative finite-difference verification and automated tests
+ - 21-day Random Forest forecast and expanding-window walk-forward evaluation
+ - inverse-volatility comparison, drift-aware turnover and transaction costs
+ - original historical-looking input in data/prices.csv (source unverified)
+ - original legacy scripts/tests/results archived intact in legacy/
+ - offline synthetic sample outputs, mathematical and limitations documentation
  - GitHub Actions pytest workflow
 Known not validated:
- - Yahoo Finance network/data path (requires internet/yfinance)
- - real ETF data results or realistic transaction fills
-Do not interpret example_results statistics as market performance.
+ - provenance/adjustment of historical-looking prices.csv
+ - realistic next-open execution, spreads, slippage, market impact
+ - Yahoo Finance network/data path
+Do not interpret example_results statistics as market performance or reuse archived metrics as current MVO outcomes.

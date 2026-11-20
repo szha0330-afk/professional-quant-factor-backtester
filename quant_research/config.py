@@ -1,6 +1,7 @@
 """Default research settings. All targets are illustrative, not investment advice."""
 
-TICKERS = ("SPY", "QQQ", "IWM", "TLT", "GLD", "EFA", "EEM", "LQD", "HYG", "VNQ")
+# Match the ten-ETF universe in the preserved historical input data/prices.csv.
+TICKERS = ("SPY", "QQQ", "IWM", "TLT", "GLD", "EFA", "EEM", "VNQ", "XLE", "XLK")
 BENCHMARK = "SPY"
 HORIZON = 21
 VOL_LOOKBACK = 63
