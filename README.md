@@ -4,7 +4,7 @@
 
 > **Repository provenance:** This is a **complete, independently runnable reconstruction** of the previously discussed factor backtester, not an exact edited clone of an inaccessible upstream GitHub repository. It retains the described research architecture (10 ETF universe, nine lagged price factors, expanding-window Random Forest forecasts, inverse-volatility baseline, 50% position cap, walk-forward evaluation, transaction costs) and adds an integrated 21-day mean–variance allocation path. If you have the original repository, compare and merge the changes before overwriting it.
 >
-> **Data honesty:** The included demo and `example_results/` use **synthetic prices**, not observed ETF histories. Do not claim the demo's CAGR or Sharpe ratios as real-world results.
+> **Data honesty:** The default demo and `example_results/` use **synthetic prices**, not observed ETF histories. Do not claim their CAGR or Sharpe ratios as real-world results. The preserved `data/prices.csv` contains a historical-looking 2010–2023 ETF price table from the older project; its vendor, adjustment method, and provenance have **not been independently verified**. The older performance outputs are archived in `legacy/results/` and are not results from this revised pipeline.
 
 ## Research question
 
@@ -12,7 +12,7 @@ Do forecasts of 21-trading-day returns, incorporated into a convex mean–varian
 
 ## Key features
 
-- Universe: SPY, QQQ, IWM, TLT, GLD, EFA, EEM, LQD, HYG, VNQ (configurable through CSV input).
+- Universe: SPY, QQQ, IWM, TLT, GLD, EFA, EEM, VNQ, XLE, XLK (matching the preserved historical CSV; configurable through CSV input).
 - **Nine price factors**: 5/21/63/126-day momentum, 20/60-day moving-average gaps, 21/63-day annualized volatility, 63-day drawdown.
 - **Expanding-window Random Forest**: forecasts each ETF's forward 21-day total return at month-end; the training set excludes labels unavailable on the prediction date.
 - **Two portfolio configurations**: inverse-volatility weighting and analytic-gradient mean–variance optimization, both long-only, fully invested, and capped at 50% per asset.
@@ -45,7 +45,7 @@ The last command should write:
 | `derivative_check.json` | Maximum finite-difference gradient/Hessian error |
 | `DATA_PROVENANCE.txt` | Whether inputs were synthetic or user/vendor supplied |
 
-### Run with real adjusted-close price data
+### Run with historical price data
 
 Supply a wide CSV with **one row per trading date** and adjusted-close ETF prices, e.g.:
 
@@ -61,6 +61,14 @@ The illustration above has too few observations to run a model: **at least about
 python run_demo.py --source csv --csv adjusted_prices.csv --output results_real
 ```
 
+The original historical-looking input is preserved at `data/prices.csv`. To run it through the **new** pipeline, after checking its source and adjustment conventions:
+
+```bash
+python run_demo.py --source csv --csv data/prices.csv --output results_historical
+```
+
+The resulting report is a research backtest with simplified execution assumptions; **do not report its performance as a verified, investable historical return** without checking provenance, market-calendar alignment, and fill/slippage sensitivity. Use `data/DATA_PROVENANCE.md` as a checklist.
+
 For optional Yahoo Finance download (internet required; unverified in this offline environment):
 
 ```bash
@@ -68,7 +76,7 @@ python -m pip install -r requirements-optional.txt
 python run_demo.py --source yahoo --output results_yahoo
 ```
 
-**No price data or API credentials are bundled.** The CSV path is the most reproducible way to run research with a documented data vendor/source.
+No API credentials are bundled. A legacy price CSV is included for preservation, but does not by itself establish trustworthy data provenance. An independently documented vendor export is the best basis for research claims.
 
 ## Math: what the implementation proves
 
@@ -109,7 +117,9 @@ run_demo.py           command-line end-to-end pipeline
 examples/             derivatives demo
 example_results/      one synthetic sample run, clearly labeled
 tests/                automated research/math tests
-docs/                 math explanation, migration and caveats
+docs/                 math explanation, integration guide and caveats
+data/prices.csv        preserved historical-looking input, provenance unverified
+legacy/               original, incompatible pipeline and older results, unchanged
 .github/workflows/    GitHub Actions test workflow
 ```
 
@@ -122,6 +132,7 @@ docs/                 math explanation, migration and caveats
 5. The annualization factor is 252 and the Sharpe calculation uses a zero risk-free rate. Benchmark SPY is shown without buy-side execution costs; allocator turnover includes entry and later rebalances.
 6. Random Forest forecasts are noisy; portfolio optimization is sensitive to estimated returns/covariance. Out-of-sample results must be independently checked and may be worse than the baseline.
 7. The sample synthetic generator uses weekdays, not an actual exchange holiday calendar. Sample performance is pedagogical only.
+8. `legacy/results/` contains older-model outputs. Do not mix those figures with outputs of the current SLSQP mean-variance pipeline. The older tests and entrypoints are archived rather than silently rewritten.
 
 ## Research and application use
 
