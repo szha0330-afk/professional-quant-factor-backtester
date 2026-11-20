@@ -10,11 +10,14 @@ Includes:
  - 21-day Random Forest forecast and expanding-window walk-forward evaluation
  - inverse-volatility comparison, drift-aware turnover and transaction costs
  - original historical-looking input in data/prices.csv (source unverified)
- - original legacy scripts/tests/results archived intact in legacy/
+ - superseded scripts and tests preserved under legacy/
+ - earlier output artifacts retained separately in legacy/results/ and legacy/results_original_github/
  - offline synthetic sample outputs, mathematical and limitations documentation
  - GitHub Actions pytest workflow
 Known not validated:
  - provenance/adjustment of historical-looking prices.csv
  - realistic next-open execution, spreads, slippage, market impact
  - Yahoo Finance network/data path
+ - financial validity of any result retained under legacy/
 Do not interpret example_results statistics as market performance or reuse archived metrics as current MVO outcomes.
+Documentation: README.md, docs/MATHEMATICAL_FOUNDATIONS.md, docs/METHODOLOGY_AND_LIMITATIONS.md, and data/DATA_PROVENANCE.md.

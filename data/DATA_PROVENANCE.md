@@ -15,3 +15,5 @@ Before citing historical results in a CV or public project:
 5. Check execution assumptions and sensitivities to fees, spreads, and slippage.
 
 The older `legacy/results/` files are preserved for comparison only; they are not validated outputs from the current mean-variance implementation.
+
+The separate `legacy/results_original_github/` archive retains result files that existed in the earlier GitHub repository. Neither archived results directory establishes reproducible current-pipeline performance; use the recorded commands and independently checked market data when making performance claims.

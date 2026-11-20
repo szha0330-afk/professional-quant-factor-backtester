@@ -20,6 +20,7 @@ Do forecasts of 21-trading-day returns, incorporated into a convex mean–varian
 - **Constrained SLSQP** with the analytic gradient; the Hessian is computed and validated independently (SLSQP does not consume it).
 - **Next-session execution assumption**: signals generated at close on trading day *t* affect returns beginning at *t+1*, with drift-aware turnover and proportional transaction costs.
 - **Verification**: deterministic offline unit tests; a CLI writes CSVs, a comparison PNG, and a derivative audit.
+- **Repository organization**: current research code is maintained in `quant_research/`; superseded scripts and historical outputs are retained under `legacy/` for traceability.
 
 ## Get started (Windows PowerShell / macOS / Linux)
 
@@ -116,11 +117,11 @@ quant_research/
 run_demo.py           command-line end-to-end pipeline
 examples/             derivatives demo
 example_results/      one synthetic sample run, clearly labeled
-tests/                automated research/math tests
-docs/                 math explanation, integration guide and caveats
+tests/                automated research/math tests and test instructions
+docs/                 mathematical foundations and methodology limitations
 data/prices.csv        preserved historical-looking input, provenance unverified
-legacy/               original, incompatible pipeline and older results, unchanged
-.github/workflows/    GitHub Actions test workflow
+legacy/               archived scripts, historical tests and preserved old results
+.github/workflows/    GitHub Actions test workflow and CI notes
 ```
 
 ## Bias controls, assumptions, and limitations
@@ -132,7 +133,7 @@ legacy/               original, incompatible pipeline and older results, unchang
 5. The annualization factor is 252 and the Sharpe calculation uses a zero risk-free rate. Benchmark SPY is shown without buy-side execution costs; allocator turnover includes entry and later rebalances.
 6. Random Forest forecasts are noisy; portfolio optimization is sensitive to estimated returns/covariance. Out-of-sample results must be independently checked and may be worse than the baseline.
 7. The sample synthetic generator uses weekdays, not an actual exchange holiday calendar. Sample performance is pedagogical only.
-8. `legacy/results/` contains older-model outputs. Do not mix those figures with outputs of the current SLSQP mean-variance pipeline. The older tests and entrypoints are archived rather than silently rewritten.
+8. `legacy/results/` and `legacy/results_original_github/` preserve earlier output artifacts. Do not mix those figures with outputs of the current SLSQP mean-variance pipeline. The older tests and entrypoints are archived rather than silently rewritten.
 
 ## Research and application use
 
@@ -140,4 +141,4 @@ Describe the **implemented methods** and mathematical diagnostics, not unverifie
 
 > Extended a walk-forward ETF factor backtester with a constrained mean–variance optimizer, implementing and validating analytic gradients/Hessians, no-lookahead 21-day forecast alignment, and transaction-cost-aware comparisons against inverse-volatility allocation.
 
-See [Migration instructions (中文)](docs/INTEGRATION_GUIDE_CN.md) and [Methodology](docs/METHODOLOGY_AND_LIMITATIONS.md).
+For implementation details, see [Mathematical Foundations](docs/MATHEMATICAL_FOUNDATIONS.md), [Methodology and Limitations](docs/METHODOLOGY_AND_LIMITATIONS.md), and the [Data Provenance Checklist](data/DATA_PROVENANCE.md). Run `python -m pytest -q` to reproduce the automated checks before reporting findings.
