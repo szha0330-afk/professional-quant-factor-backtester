@@ -1,10 +1,8 @@
-# Professional Quant Factor Backtester — Multivariable Calculus Edition
+# Professional Quant Factor Backtester
 
 **A reproducible research demonstration of cross-asset factor forecasting and constrained portfolio optimization.**
 
-> **Repository provenance:** This is a **complete, independently runnable reconstruction** of the previously discussed factor backtester, not an exact edited clone of an inaccessible upstream GitHub repository. It retains the described research architecture (10 ETF universe, nine lagged price factors, expanding-window Random Forest forecasts, inverse-volatility baseline, 50% position cap, walk-forward evaluation, transaction costs) and adds an integrated 21-day mean–variance allocation path. If you have the original repository, compare and merge the changes before overwriting it.
->
-> **Data honesty:** The default demo and `example_results/` use **synthetic prices**, not observed ETF histories. Do not claim their CAGR or Sharpe ratios as real-world results. The preserved `data/prices.csv` contains a historical-looking 2010–2023 ETF price table from the older project; its vendor, adjustment method, and provenance have **not been independently verified**. The older performance outputs are archived in `legacy/results/` and are not results from this revised pipeline.
+> **Demonstration data:** The default demo and `example_results/` use **synthetic prices**, not observed ETF histories. Performance figures below illustrate the pipeline and are **not verified historical or investable returns**. See [Data provenance and project history](#data-provenance-and-project-history).
 
 ## Research question
 
@@ -21,6 +19,47 @@ Do forecasts of 21-trading-day returns, incorporated into a convex mean–varian
 - **Next-session execution assumption**: signals generated at close on trading day *t* affect returns beginning at *t+1*, with drift-aware turnover and proportional transaction costs.
 - **Verification**: deterministic offline unit tests; a CLI writes CSVs, a comparison PNG, and a derivative audit.
 - **Repository organization**: current research code is maintained in `quant_research/`; superseded scripts and historical outputs are retained under `legacy/` for traceability.
+
+## Reproducible demonstration results
+
+These are recorded outputs from the **synthetic-data example** in `example_results/`, not evidence of live or historical ETF strategy performance. Both portfolios are evaluated under the same illustrative data and backtest assumptions; their relative performance may change on other datasets or configurations.
+
+![Synthetic-data equity curves comparing mean-variance and inverse-volatility allocation](example_results/comparison.png)
+
+### Backtest summary
+
+| Metric | Inverse-volatility baseline | Constrained mean-variance |
+|---|---:|---:|
+| CAGR | 4.07% | 9.14% |
+| Annualized volatility | 11.34% | 11.95% |
+| Sharpe (risk-free rate = 0) | 0.408 | 0.791 |
+| Maximum drawdown | -7.36% | -6.04% |
+| Total return over example period | 3.49% | 7.82% |
+| Total turnover (sum of traded weight) | 14.65 | 16.35 |
+| Rebalances | 11 | 11 |
+
+Source: [`example_results/strategy_metrics.csv`](example_results/strategy_metrics.csv). The displayed CAGR and Sharpe values are **synthetic scenario outcomes**, not claims of observed ETF performance.
+
+### Analytical derivative validation
+
+The mean-variance objective uses an analytic gradient and Hessian. A deterministic three-asset numerical check compares these derivatives with finite differences:
+
+| Diagnostic | Recorded result |
+|---|---:|
+| Maximum gradient absolute error | `1.02448e-11` |
+| Maximum Hessian absolute error | `1.10271e-12` |
+| Minimum Hessian eigenvalue | `0.20599` |
+
+Source: [`example_results/derivative_check.json`](example_results/derivative_check.json). The positive minimum eigenvalue is for this diagnostic setup; it does not certify every possible input covariance. Tests also check fully invested, long-only, capped portfolio weights and the exclusion of future prices from allocation decisions (`tests/test_optimization.py`).
+
+### Inspect the outputs
+
+- [`equity_curves.csv`](example_results/equity_curves.csv): daily equity paths underlying the illustration.
+- [`signal_weights_mean_variance.csv`](example_results/signal_weights_mean_variance.csv): portfolio weights at rebalance signals.
+- [`predictions.csv`](example_results/predictions.csv): forecasts and available training cutoffs.
+- [`trades_mean_variance.csv`](example_results/trades_mean_variance.csv): portfolio turnover and execution records.
+
+Run the commands in [Get started](#get-started-windows-powershell--macos--linux) to reproduce a demonstration. Its outputs depend on the specified run configuration; archived example files should not be assumed to match changed defaults or random seeds.
 
 ## Get started (Windows PowerShell / macOS / Linux)
 
@@ -99,7 +138,7 @@ The covariance is estimated from at most the preceding 63 complete daily returns
 
 The implementation explicitly checks the analytic gradient and Hessian against finite differences (see `quant_research/diagnostics.py`). See [Mathematical Notes](docs/MATHEMATICAL_FOUNDATIONS.md) for KKT conditions and limitations.
 
-**Scope:** This shows partial differentiation, matrix calculus, Hessians, and constrained optimization. It does **not** establish coursework in double/triple integrals or substitute for an MFE program's prerequisite transcript requirements.
+**Scope:** This implementation demonstrates partial differentiation, matrix calculus, Hessians, and constrained optimization within the stated numerical model.
 
 ## Project structure
 
@@ -135,10 +174,10 @@ legacy/               archived scripts, historical tests and preserved old resul
 7. The sample synthetic generator uses weekdays, not an actual exchange holiday calendar. Sample performance is pedagogical only.
 8. `legacy/results/` and `legacy/results_original_github/` preserve earlier output artifacts. Do not mix those figures with outputs of the current SLSQP mean-variance pipeline. The older tests and entrypoints are archived rather than silently rewritten.
 
-## Research and application use
+## Data provenance and project history
 
-Describe the **implemented methods** and mathematical diagnostics, not unverified outperformance. Suggested resume wording after inspecting the code and reproducing the results:
+This repository is an **independently runnable reconstruction** of an earlier factor-backtesting project, extended with an integrated 21-day constrained mean-variance allocation workflow. It is not represented as a line-by-line modification of an inaccessible upstream repository. Earlier scripts and outputs are retained under `legacy/` for traceability.
 
-> Extended a walk-forward ETF factor backtester with a constrained mean–variance optimizer, implementing and validating analytic gradients/Hessians, no-lookahead 21-day forecast alignment, and transaction-cost-aware comparisons against inverse-volatility allocation.
+The default demo uses synthetic prices. The preserved `data/prices.csv` contains a historical-looking 2010–2023 ETF price table from the older project, but its vendor, adjustment conventions, and provenance have **not been independently verified**. Files under `legacy/results/` and `legacy/results_original_github/` are archived outputs, **not results from the current optimization pipeline**. Do not combine those historic-looking outputs with the current synthetic demonstration or present them as verified live-market performance.
 
-For implementation details, see [Mathematical Foundations](docs/MATHEMATICAL_FOUNDATIONS.md), [Methodology and Limitations](docs/METHODOLOGY_AND_LIMITATIONS.md), and the [Data Provenance Checklist](data/DATA_PROVENANCE.md). Run `python -m pytest -q` to reproduce the automated checks before reporting findings.
+For implementation and data caveats, consult [Mathematical Foundations](docs/MATHEMATICAL_FOUNDATIONS.md), [Methodology and Limitations](docs/METHODOLOGY_AND_LIMITATIONS.md), and the [Data Provenance Checklist](data/DATA_PROVENANCE.md). Run `python -m pytest -q` before reporting new results.
